@@ -3,7 +3,8 @@ plugins {
 }
 
 android {
-    compileSdk 32
+    namespace "com.cimoc.haleydu"
+    compileSdk 37
 
     defaultConfig {
         applicationId "com.cimoc.haleydu"

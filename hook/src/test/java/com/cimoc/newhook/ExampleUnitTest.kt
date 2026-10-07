@@ -1,4 +1,4 @@
-package cc.aoeiuv020.hookcimoc
+package com.cimoc.newhook
 
 import org.junit.Test
 

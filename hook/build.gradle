@@ -3,16 +3,24 @@ plugins {
 }
 
 android {
-    compileSdk 32
+    // AGP 8+ 要求 namespace（原 manifest package 属性移到这里）；改名后包为 com.cimoc.newhook
+    namespace "com.cimoc.newhook"
+    // libxposed api 102.0.0 的 AAR 声明 minCompileSdk=37
+    compileSdk 37
 
     defaultConfig {
-        applicationId "cc.aoeiuv020.hookcimoc"
+        applicationId "com.cimoc.newhook"
         minSdk 26
         targetSdk 32
         versionCode 1
         versionName "1.7.113"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildFeatures {
+        // AGP 8+ 默认关闭 BuildConfig，MainHook 用到 BuildConfig.DEBUG
+        buildConfig true
     }
 
     buildTypes {
@@ -25,11 +33,19 @@ android {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
+
+    lint {
+        // 本模块经 LSPosed 仓库分发，不上架 Google Play；
+        // AGP 9 的 lintVitalRelease 会因 targetSdk 32 报 ExpiredTargetSdkVersion 中断 release 构建
+        disable 'ExpiredTargetSdkVersion'
+    }
 }
 
 dependencies {
-    compileOnly 'de.robv.android.xposed:api:82'
-    compileOnly 'de.robv.android.xposed:api:82:sources'
+    // 旧版: compileOnly 'de.robv.android.xposed:api:82'（含 :sources）
+    // 新版: 现代 LibXposed API 102
+    compileOnly 'io.github.libxposed:api:102.0.0'
+    compileOnly 'androidx.annotation:annotation:1.9.1'
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'

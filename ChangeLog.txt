@@ -1,5 +1,6 @@
 更新日志：
 1.7.113:
+迁移LibXposed API 102（需LSPosed 1.9.3+），
 上传lsposed仓库，
 
 1.7.88:

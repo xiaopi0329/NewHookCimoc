@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="cc.aoeiuv020.hookcimoc">
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -11,6 +10,7 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Light"
         tools:ignore="AllowBackup">
+        <!-- 以下为旧框架兼容元数据；LibXposed 102 模块真正的声明在 META-INF/xposed/ -->
         <meta-data
             android:name="xposedscope"
             android:resource="@array/xposed_scope" />
@@ -22,7 +22,7 @@
             android:value="给Cimoc漫画去广告" />
         <meta-data
             android:name="xposedminversion"
-            android:value="82" />
+            android:value="102" />
 
     </application>
 

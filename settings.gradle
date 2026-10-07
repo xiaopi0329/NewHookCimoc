@@ -10,9 +10,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://api.xposed.info/' }
+        // 旧版: maven { url 'https://api.xposed.info/' }（libxposed api 在 Maven Central，无需该仓库）
     }
 }
-rootProject.name = "HookCimoc"
+rootProject.name = "NewHookCimoc"
 include ':hook'
 include ':app'
