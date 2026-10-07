@@ -1,4 +1,6 @@
 name: CI
+permissions:
+  contents: write   # 允许用 GITHUB_TOKEN 创建 release/tag（fork 默认令牌只读）
 env:
   TZ: Asia/Shanghai
 
