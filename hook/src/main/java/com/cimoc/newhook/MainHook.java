@@ -15,20 +15,17 @@ import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
 
 /**
- * LibXposed API 102 版本入口（原 de.robv.android.xposed API 82 迁移而来）。
+ * LibXposed API 102 入口（原 de.robv.android.xposed API 82 迁移而来）。
  * <p>
- * 迁移要点：
+ * hook 点已按真机反编译（运行时反射枚举 dex）适配到 Cimoc 1.7.276：
  * <ul>
- * <li>入口不再实现 IXposedHookLoadPackage，而是继承 io.github.libxposed.api.XposedModule，
- * 框架自动 attachFramework，模块不得在 onModuleLoaded 之前初始化。</li>
- * <li>lpparam 换成 onPackageReady 的 PackageReadyParam（classloader 就绪、即将创建 Application 时回调）。</li>
- * <li>hook 模型从 XC_MethodHook(before/after/setResult) 改为 OkHttp 式拦截链：
- * hook(Executable).intercept(chain -> ...)；不调用 chain.proceed() 即跳过原方法（等效 setResult 拦截），
- * 返回值即结果；proceed() 返回值等效 param.getResult()。</li>
- * <li>XposedHelpers.findAndHookMethod / findClass / setObjectField / callMethod / XposedBridge.log
- * 没有对应替代 API，用标准反射 + XposedInterface#log 实现（见下方私有工具方法）。</li>
- * <li>保留原“callApplicationOnCreate 之后再装 hook”的时序，行为与旧版一致。</li>
+ * <li>SplashActivity.loadSplashAd → loadATSplashAd / loadSSPSplashAd / loadSuyiSplashAd（showAD 仍在）</li>
+ * <li>MainActivity 的广告方法整体迁移到 com.haleydu.cimoc.utils.AdUtils（带 Activity 参数）</li>
+ * <li>剪切板类 com.youxiao.ssp.base.tools.n → com.youxiao.ssp.ax.d.f（a(Context,String) 仍为 static）</li>
+ * <li>SearchActivity 的 initAd/loadBannerAd/requestBannerAd/showAd/showBannerAd、
+ * Manga.isCopyrightManga、PreferenceManager.getBoolean 未变</li>
  * </ul>
+ * 每个 hook 独立安装（safe 包装）：目标 app 升级导致个别方法缺失时，只影响该处，不中断其余 hook。
  */
 @SuppressWarnings("RedundantThrows")
 public class MainHook extends XposedModule {
@@ -81,7 +78,7 @@ public class MainHook extends XposedModule {
 
     /**
      * 热重载完成（运行在新代码中）：包生命周期回调不会重放，
-     * 这里先卸载旧一代全部 hook，再重新安装，避免更新后 hook 丢失。
+     * 先卸载旧一代全部 hook，再重新安装，避免更新后 hook 丢失。
      */
     @Override
     public void onHotReloaded(XposedModuleInterface.HotReloadedParam param) {
@@ -105,7 +102,6 @@ public class MainHook extends XposedModule {
         safe("hookSplash", this::hookSplash);
         safe("hookMain", this::hookMain);
         safe("hookSearch", this::hookSearch);
-        // safe("hookResult", this::hookResult);
         safe("hookClip", this::hookClip);
         safe("hookCopyright", this::hookCopyright);
         safe("hookDebug", this::hookDebug);
@@ -122,6 +118,8 @@ public class MainHook extends XposedModule {
     private interface ThrowingRunnable {
         void run() throws Throwable;
     }
+
+    // ---------- 各去广告点（1.7.276 实测签名） ----------
 
     private void hookCopyright() throws Throwable {
         Method m = findMethod("com.haleydu.cimoc.core.Manga", "isCopyrightManga", String.class);
@@ -148,57 +146,48 @@ public class MainHook extends XposedModule {
             // 不调 proceed：原方法体不执行（等效旧版 setResult(null) 拦截）
             return null;
         };
-        safe("splash.loadSplashAd", () -> hook(findMethod("com.haleydu.cimoc.SplashActivity", "loadSplashAd")).intercept(skipAd));
-        safe("splash.showAD", () -> hook(findMethod("com.haleydu.cimoc.SplashActivity", "showAD")).intercept(skipAd));
-    }
-
-    private void logHook(XposedInterface.Chain chain) {
-        Executable e = chain.getExecutable();
-        Object thiz = chain.getThisObject();
-        String clazz = thiz != null ? thiz.getClass().getName() : e.getDeclaringClass().getName();
-        log(Log.INFO, TAG, "hook: " + clazz + "." + e.getName());
-        if (DEBUG) {
-            log(Log.INFO, TAG, "stack trace", new Throwable());
+        // 1.7.276：loadSplashAd 拆成三家 SDK 的加载方法，showAD 仍在；逐个尝试，全部跳过
+        for (String method : new String[]{"loadATSplashAd", "loadSSPSplashAd", "loadSuyiSplashAd", "loadSplashAd", "showAD"}) {
+            safe("splash." + method, () -> hook(findMethod("com.haleydu.cimoc.SplashActivity", method)).intercept(skipAd));
         }
     }
 
     private void hookMain() {
-        nothing("com.haleydu.cimoc.ui.activity.MainActivity",
-                "loadInteractionAd",
-                "loadRewardAd",
-                "requestInteractionAd",
-                "requestRewardAd",
-                "showInteractionAd",
-                "showRewardAd",
-                "startInteractionAd"
-        );
+        // 1.7.276：MainActivity 的广告方法整体迁移到 AdUtils（实例方法，参数带 Activity）
+        String clazz = "com.haleydu.cimoc.utils.AdUtils";
+        nothing(clazz, "loadSSPInteractionAd", activityClass());
+        nothing(clazz, "loadSuyiInteractionAd", activityClass());
+        nothing(clazz, "loadTakuInteractionAd", activityClass());
+        nothing(clazz, "loadSSPRewardAd", activityClass(), boolean.class);
+        nothing(clazz, "loadSuyiRewardAd", activityClass(), boolean.class);
+        nothing(clazz, "loadTakuRewardAd", activityClass(), boolean.class);
+        nothing(clazz, "showInteractionAd", activityClass());
+        nothing(clazz, "showRewardAd", activityClass(), boolean.class);
+        nothing(clazz, "startInteractionAd", activityClass());
+        // 兼容旧版：MainActivity 上的同名无参方法（1.7.113 及以前）
+        nothingAll("com.haleydu.cimoc.ui.activity.MainActivity",
+                "loadInteractionAd", "loadRewardAd", "requestInteractionAd", "requestRewardAd",
+                "showInteractionAd", "showRewardAd", "startInteractionAd");
     }
 
     private void hookSearch() {
-        nothing("com.haleydu.cimoc.ui.activity.SearchActivity",
-                "initAd",
-                "loadBannerAd",
-                "requestBannerAd",
-                "showAd",
-                "showBannerAd"
-        );
+        String clazz = "com.haleydu.cimoc.ui.activity.SearchActivity";
+        nothingAll(clazz, "initAd", "loadBannerAd", "requestBannerAd", "showAd", "showBannerAd");
+        // 1.7.276 新增的原生广告入口，一并静默
+        nothing(clazz, "releaseAd");
     }
 
-    // 原调试用代码，注释保留；如需启用按 102 写法：
-    // private void hookResult() throws Throwable {
-    //     Class<?> clazz = findClass("com.haleydu.cimoc.source.Kuaikanmanhua");
-    //     Method m = findMethod(clazz, "getSearchRequest", String.class, int.class);
-    //     hook(m).intercept(chain -> {
-    //         logHook(chain);
-    //         Object builder = findClass("okhttp3.Request.Builder").getDeclaredConstructor().newInstance();
-    //         invoke(builder, "url", "http://127.0.0.1/");
-    //         return invoke(builder, "build");
-    //     });
-    // }
-
-    private void hookClip() throws Throwable {
-        Method m = findMethod("com.youxiao.ssp.base.tools.n", "a", Context.class, String.class);
-        hook(m).intercept(chain -> null);
+    private void hookClip() {
+        // 1.7.276：com.youxiao.ssp.base.tools.n 混淆为 com.youxiao.ssp.ax.d.f，a(Context,String) 仍为 static
+        safe("clip.axdf.a", () -> {
+            Method m = findMethod("com.youxiao.ssp.ax.d.f", "a", Context.class, String.class);
+            hook(m).intercept(chain -> null);
+        });
+        // 兼容旧版类名
+        safe("clip.tools.n.a", () -> {
+            Method m = findMethod("com.youxiao.ssp.base.tools.n", "a", Context.class, String.class);
+            hook(m).intercept(chain -> null);
+        });
     }
 
     private void hookDebug() throws Throwable {
@@ -213,17 +202,33 @@ public class MainHook extends XposedModule {
         });
     }
 
-    private void nothing(String className, String... methods) {
-        for (String method : methods) {
-            try {
-                hook(findMethod(className, method)).intercept(chain -> {
-                    logHook(chain);
-                    return null;
-                });
-            } catch (Throwable t) {
-                log(Log.ERROR, TAG, "nothing hook failed: " + t);
-            }
+    private void logHook(XposedInterface.Chain chain) {
+        Executable e = chain.getExecutable();
+        Object thiz = chain.getThisObject();
+        String clazz = thiz != null ? thiz.getClass().getName() : e.getDeclaringClass().getName();
+        log(Log.INFO, TAG, "hook: " + clazz + "." + e.getName());
+        if (DEBUG) {
+            log(Log.INFO, TAG, "stack trace", new Throwable());
         }
+    }
+
+    private void nothing(String className, String method, Class<?>... argTypes) {
+        safe(className + "." + method, () -> {
+            hook(findMethod(className, method, argTypes)).intercept(chain -> {
+                logHook(chain);
+                return null;
+            });
+        });
+    }
+
+    private void nothingAll(String className, String... methods) {
+        for (String method : methods) {
+            nothing(className, method, new Class<?>[0]);
+        }
+    }
+
+    private static Class<?> activityClass() {
+        return android.app.Activity.class;
     }
 
     // ---------- 替代 XposedHelpers 的私有工具方法 ----------
