@@ -100,18 +100,27 @@ public class MainHook extends XposedModule {
             return;
         }
         hooksInstalled = true;
+        // 每个 hook 独立安装：目标 app 升级后个别方法不存在时，只影响该处去广告，不再中断其余 hook
+        safe("hookPreference", this::hookPreference);
+        safe("hookSplash", this::hookSplash);
+        safe("hookMain", this::hookMain);
+        safe("hookSearch", this::hookSearch);
+        // safe("hookResult", this::hookResult);
+        safe("hookClip", this::hookClip);
+        safe("hookCopyright", this::hookCopyright);
+        safe("hookDebug", this::hookDebug);
+    }
+
+    private void safe(String name, ThrowingRunnable body) {
         try {
-            hookDebug();
-            hookPreference();
-            hookSplash();
-            hookMain();
-            hookSearch();
-            // hookResult();
-            hookClip();
-            hookCopyright();
+            body.run();
         } catch (Throwable t) {
-            log(Log.ERROR, TAG, "installHooks failed", t);
+            log(Log.ERROR, TAG, name + " failed: " + t);
         }
+    }
+
+    private interface ThrowingRunnable {
+        void run() throws Throwable;
     }
 
     private void hookCopyright() throws Throwable {
@@ -130,8 +139,7 @@ public class MainHook extends XposedModule {
         });
     }
 
-    private void hookSplash() throws Throwable {
-        Class<?> clazz = findClass("com.haleydu.cimoc.SplashActivity");
+    private void hookSplash() {
         XposedInterface.Hooker skipAd = chain -> {
             logHook(chain);
             Object thiz = chain.getThisObject();
@@ -140,8 +148,8 @@ public class MainHook extends XposedModule {
             // 不调 proceed：原方法体不执行（等效旧版 setResult(null) 拦截）
             return null;
         };
-        hook(findMethod(clazz, "loadSplashAd")).intercept(skipAd);
-        hook(findMethod(clazz, "showAD")).intercept(skipAd);
+        safe("splash.loadSplashAd", () -> hook(findMethod("com.haleydu.cimoc.SplashActivity", "loadSplashAd")).intercept(skipAd));
+        safe("splash.showAD", () -> hook(findMethod("com.haleydu.cimoc.SplashActivity", "showAD")).intercept(skipAd));
     }
 
     private void logHook(XposedInterface.Chain chain) {
